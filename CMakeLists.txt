@@ -5,7 +5,8 @@ cmake_minimum_required(VERSION 3.16)
 project(AmazingPlayer)
 
 # 添加子目录，包括ui模块
-add_subdirectory(src/ui)
+add_subdirectory(AmazingPlayerImpl/ui)
+add_subdirectory(AmazingPlayerImpl/gstreamer)
 
 # 设置主项目的源文件
 set(SOURCES
@@ -16,5 +17,10 @@ set(SOURCES
 # 创建可执行文件并链接ui库
 add_executable(AmazingPlayer ${SOURCES})
 target_link_libraries(AmazingPlayer ui)
+target_link_libraries(AmazingPlayer GST)
 
-target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/inc)
+target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/AmazingPlayerImpl/ui/inc)
+target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/AmazingPlayerImpl/gstreamer/inc)
+target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/AmazingPlayerImpl/common)
+# 链接GStreamer库
+target_link_libraries(${PROJECT_NAME} ${GST_LIBRARIES})

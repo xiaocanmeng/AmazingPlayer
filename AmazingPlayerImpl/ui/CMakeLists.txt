@@ -20,7 +20,7 @@ set(UI_HEADERS
 add_library(ui ${UI_SOURCES} ${UI_HEADERS})
 
 # 添加包含目录，以便在其他目录中引用头文件
-target_include_directories(ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/inc)
 
 # 添加链接到其他库的任何必要的内容
 # 例如，如果ui模块依赖于某些第三方库，可以在这里添加链接

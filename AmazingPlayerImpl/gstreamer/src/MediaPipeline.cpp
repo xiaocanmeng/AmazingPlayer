@@ -1,33 +1,29 @@
 // Time management
 #include "MediaPipeline.h"// GUI toolkit integration
 #include <string.h>
-// #include <gtk/gtk.h>
-// #include <gst/gst.h>
-// #include <gdk/gdk.h>
-
-
 #include "utility.hpp"
 
+
 /* This function is called when the PLAY button is clicked */
-static void play_cb(GtkButton *button, CustomData *data)
+void AMZPlayer::play_cb(GtkButton *button, CustomData *data)
 {
     gst_element_set_state(data->playbin, GST_STATE_PLAYING);
 }
 
 /* This function is called when the PAUSE button is clicked */
-static void pause_cb(GtkButton *button, CustomData *data)
+void AMZPlayer::pause_cb(GtkButton *button, CustomData *data)
 {
     gst_element_set_state(data->playbin, GST_STATE_PAUSED);
 }
 
 /* This function is called when the STOP button is clicked */
-static void stop_cb(GtkButton *button, CustomData *data)
+void AMZPlayer::stop_cb(GtkButton *button, CustomData *data)
 {
     gst_element_set_state(data->playbin, GST_STATE_READY);
 }
 
 /* This function is called when the main window is closed */
-static void delete_event_cb(GtkWidget *widget, GdkEvent *event, CustomData *data)
+void AMZPlayer::delete_event_cb(GtkWidget *widget, GdkEvent *event, CustomData *data)
 {
     stop_cb(NULL, data);
     gtk_main_quit();
@@ -35,7 +31,7 @@ static void delete_event_cb(GtkWidget *widget, GdkEvent *event, CustomData *data
 
 /* This function is called when the slider changes its position. We perform a seek to the
  * new position here. */
-static void slider_cb(GtkRange *range, CustomData *data)
+void AMZPlayer::slider_cb(GtkRange *range, CustomData *data)
 {
     gdouble value = gtk_range_get_value(GTK_RANGE(data->slider));
     gst_element_seek_simple(data->playbin, GST_FORMAT_TIME, static_cast<GstSeekFlags>(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT),
@@ -43,7 +39,7 @@ static void slider_cb(GtkRange *range, CustomData *data)
 }
 
 /* This creates all the GTK+ widgets that compose our application, and registers the callbacks */
-static void create_ui(CustomData *data)
+void AMZPlayer::create_ui(CustomData *data)
 {
     GtkWidget *main_window;                              /* The uppermost window, containing all other windows */
     GtkWidget *main_box;                                 /* VBox to hold main_hbox and the controls */
@@ -90,7 +86,7 @@ static void create_ui(CustomData *data)
 }
 
 /* This function is called periodically to refresh the GUI */
-static gboolean refresh_ui(CustomData *data)
+gboolean AMZPlayer::refresh_ui(CustomData *data)
 {
     gint64 current = -1;
     /* We do not want to update anything unless we are in the PAUSED or PLAYING states */
@@ -127,7 +123,7 @@ static gboolean refresh_ui(CustomData *data)
 }
 
 /* This function is called when new metadata is discovered in the stream */
-static void tags_cb(GstElement *playbin, gint stream, CustomData *data)
+void AMZPlayer::tags_cb(GstElement *playbin, gint stream, CustomData *data)
 {
     /* We are possibly in a GStreamer working thread, so we notify the main
      * thread of this event through a message in the bus */
@@ -137,7 +133,7 @@ static void tags_cb(GstElement *playbin, gint stream, CustomData *data)
 }
 
 /* This function is called when an error message is posted on the bus */
-static void error_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+void AMZPlayer::error_cb(GstBus *bus, GstMessage *msg, CustomData *data)
 {
     GError *err;
     gchar *debug_info;
@@ -155,7 +151,7 @@ static void error_cb(GstBus *bus, GstMessage *msg, CustomData *data)
 
 /* This function is called when an End-Of-Stream message is posted on the bus.
  * We just set the pipeline to READY (which stops playback) */
-static void eos_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+void AMZPlayer::eos_cb(GstBus *bus, GstMessage *msg, CustomData *data)
 {
     g_print("End-Of-Stream reached.\n");
     gst_element_set_state(data->playbin, GST_STATE_READY);
@@ -163,7 +159,7 @@ static void eos_cb(GstBus *bus, GstMessage *msg, CustomData *data)
 
 /* This function is called when the pipeline changes states. We use it to
  * keep track of the current state. */
-static void state_changed_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+void AMZPlayer::state_changed_cb(GstBus *bus, GstMessage *msg, CustomData *data)
 {
     GstState old_state, new_state, pending_state;
     gst_message_parse_state_changed(msg, &old_state, &new_state, &pending_state);
@@ -180,7 +176,7 @@ static void state_changed_cb(GstBus *bus, GstMessage *msg, CustomData *data)
 }
 
 /* Extract metadata from all the streams and write it to the text widget in the GUI */
-static void analyze_streams(CustomData *data)
+void AMZPlayer::analyze_streams(CustomData *data)
 {
     gint i;
     GstTagList *tags;
@@ -275,7 +271,7 @@ static void analyze_streams(CustomData *data)
 
 /* This function is called when an "application" message is posted on the bus.
  * Here we retrieve the message posted by the tags_cb callback */
-static void application_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+void AMZPlayer::application_cb(GstBus *bus, GstMessage *msg, CustomData *data)
 {
     if (g_strcmp0(gst_structure_get_name(gst_message_get_structure(msg)), "tags-changed") == 0)
     {
@@ -285,7 +281,7 @@ static void application_cb(GstBus *bus, GstMessage *msg, CustomData *data)
     }
 }
 
-int32_t tutorial_main_5(int32_t argc, char *argv[])
+int32_t AMZPlayer::StartUP(int32_t argc, char *argv[])
 {
     CustomData data;
     GstStateChangeReturn ret;

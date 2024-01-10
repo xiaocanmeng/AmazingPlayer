@@ -9,8 +9,8 @@ int main (int argc, char *argv[])
 #else
   
   int32_t ret{};
-  AMZPlayer foo1{};
-  
+  // AMZPlayer foo1{};
+  // ret = foo1.StartUP(argc,argv); 
  
  
   

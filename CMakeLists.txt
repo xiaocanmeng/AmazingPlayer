@@ -20,6 +20,7 @@ target_link_libraries(AmazingPlayer ui)
 target_link_libraries(AmazingPlayer GST)
 
 target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/AmazingPlayerImpl/ui/inc)
+target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/AmazingPlayerImpl/mock/inc)
 target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/AmazingPlayerImpl/gstreamer/inc)
 target_include_directories(AmazingPlayer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/AmazingPlayerImpl/common)
 # 链接GStreamer库

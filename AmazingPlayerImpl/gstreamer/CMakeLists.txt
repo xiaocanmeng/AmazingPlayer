@@ -29,6 +29,7 @@ target_include_directories(GST
     ${CMAKE_CURRENT_SOURCE_DIR}/inc
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/AmazingPlayerImpl/common
+    ${CMAKE_SOURCE_DIR}/AmazingPlayerImpl/mock/inc
     ${GST_INCLUDE_DIRS}  # Include GStreamer headers
 )
 

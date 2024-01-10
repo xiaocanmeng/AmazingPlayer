@@ -1,267 +1,384 @@
-#include <gst/gst.h>
-#include "MediaPipeline.h"
+// Time management
+#include "MediaPipeline.h"// GUI toolkit integration
+#include <string.h>
+// #include <gtk/gtk.h>
+// #include <gst/gst.h>
+// #include <gdk/gdk.h>
+
+
 #include "utility.hpp"
-/*******************************************************************************
-* @brief      {brief}
-* 
-* @param      [in]    new_pad_caps
-* @param      [in]    sink_pad
-* 
-* 
-* @author     XIAOCANMENG
-* 
-* @par        revision history:
-*              - 000000 : 2024-01-02 : XIAOCANMENG    : New regulations made
-* 
-* @par        Sequence diagram:
-* @image      {name}.png
-*******************************************************************************/
-void Sample::exit(GstCaps *new_pad_caps,GstPad *sink_pad)
-{
-   /* Unreference the new pad's caps, if we got them */
-  if (new_pad_caps != NULL)
-  {
-    gst_caps_unref (new_pad_caps);
-  }
 
-  /* Unreference the audiosink pad */
-  gst_object_unref (sink_pad);
-}
-/*******************************************************************************
-* @brief      {brief}
-* 
-* @param      [in]    src
-* @param      [in]    new_pad
-* @param      [in]    data
-* @param      [in]    pad_type
-* @param      [in]    prefix
-* 
-* 
-* @author     XIAOCANMENG
-* 
-* @par        revision history:
-*              - 000000 : 2024-01-02 : XIAOCANMENG    : New regulations made
-* 
-* @par        Sequence diagram:
-* @image      {name}.png
-*******************************************************************************/
-void Sample::pad_added_handler(GstElement *src, GstPad *new_pad, CustomData *data,GstPad *sink_pad,const gchar * prefix)
+/* This function is called when the PLAY button is clicked */
+static void play_cb(GtkButton *button, CustomData *data)
 {
-  GstPadLinkReturn ret;
-  GstCaps *new_pad_caps = NULL;
-  GstStructure *new_pad_struct = NULL;
-  const gchar *new_pad_type = NULL;
-  g_print ("Received new pad '%s' from '%s':\n", GST_PAD_NAME (new_pad), GST_ELEMENT_NAME (src));
-  /* If our converter is already linked, we have nothing to do here */
-  if (gst_pad_is_linked (sink_pad)) 
-  {
-    g_print ("We are already linked. Ignoring.\n");
-    exit(new_pad_caps,sink_pad);
-  }
-  else
-  {
-    /* Check the new pad's type */
-    new_pad_caps = gst_pad_get_current_caps (new_pad);
-    new_pad_struct = gst_caps_get_structure (new_pad_caps, 0);
-    new_pad_type = gst_structure_get_name (new_pad_struct);
-    if (!g_str_has_prefix (new_pad_type, prefix)) 
+    gst_element_set_state(data->playbin, GST_STATE_PLAYING);
+}
+
+/* This function is called when the PAUSE button is clicked */
+static void pause_cb(GtkButton *button, CustomData *data)
+{
+    gst_element_set_state(data->playbin, GST_STATE_PAUSED);
+}
+
+/* This function is called when the STOP button is clicked */
+static void stop_cb(GtkButton *button, CustomData *data)
+{
+    gst_element_set_state(data->playbin, GST_STATE_READY);
+}
+
+/* This function is called when the main window is closed */
+static void delete_event_cb(GtkWidget *widget, GdkEvent *event, CustomData *data)
+{
+    stop_cb(NULL, data);
+    gtk_main_quit();
+}
+
+/* This function is called when the slider changes its position. We perform a seek to the
+ * new position here. */
+static void slider_cb(GtkRange *range, CustomData *data)
+{
+    gdouble value = gtk_range_get_value(GTK_RANGE(data->slider));
+    gst_element_seek_simple(data->playbin, GST_FORMAT_TIME, static_cast<GstSeekFlags>(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT),
+                            (gint64)(value * GST_SECOND));
+}
+
+/* This creates all the GTK+ widgets that compose our application, and registers the callbacks */
+static void create_ui(CustomData *data)
+{
+    GtkWidget *main_window;                              /* The uppermost window, containing all other windows */
+    GtkWidget *main_box;                                 /* VBox to hold main_hbox and the controls */
+    GtkWidget *main_hbox;                                /* HBox to hold the video sink and the stream info text widget */
+    GtkWidget *controls;                                 /* HBox to hold the buttons and the slider */
+    GtkWidget *play_button, *pause_button, *stop_button; /* Buttons */
+
+    main_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    g_signal_connect(G_OBJECT(main_window), "delete-event", G_CALLBACK(delete_event_cb), data);
+
+    play_button =  reinterpret_cast<GtkWidget*>(gtk_button_new_from_icon_name("media-playback-start", GTK_ICON_SIZE_SMALL_TOOLBAR));
+    g_signal_connect(G_OBJECT(play_button), "clicked", G_CALLBACK(play_cb), data);
+
+    pause_button = reinterpret_cast<GtkWidget*>(gtk_button_new_from_icon_name("media-playback-pause", GTK_ICON_SIZE_SMALL_TOOLBAR));
+    g_signal_connect(G_OBJECT(pause_button), "clicked", G_CALLBACK(pause_cb), data);
+
+    stop_button = reinterpret_cast<GtkWidget*>(gtk_button_new_from_icon_name("media-playback-stop", GTK_ICON_SIZE_SMALL_TOOLBAR));
+    g_signal_connect(G_OBJECT(stop_button), "clicked", G_CALLBACK(stop_cb), data);
+
+    data->slider = reinterpret_cast<GtkWidget*>(gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, 100, 1));
+    gtk_scale_set_draw_value(GTK_SCALE(data->slider), 0);
+    data->slider_update_signal_id = g_signal_connect(G_OBJECT(data->slider), "value-changed", G_CALLBACK(slider_cb), data);
+
+    data->streams_list = reinterpret_cast<GtkWidget*>(gtk_text_view_new());
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(data->streams_list), FALSE);
+
+    controls = reinterpret_cast<GtkWidget*>(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+    gtk_box_pack_start(GTK_BOX(controls), play_button, FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(controls), pause_button, FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(controls), stop_button, FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(controls), data->slider, TRUE, TRUE, 2);
+
+    main_hbox = reinterpret_cast<GtkWidget*>(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+    gtk_box_pack_start(GTK_BOX(main_hbox), data->sink_widget, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(main_hbox), data->streams_list, FALSE, FALSE, 2);
+
+    main_box = reinterpret_cast<GtkWidget*>(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+    gtk_box_pack_start(GTK_BOX(main_box), main_hbox, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(main_box), controls, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(main_window), main_box);
+    gtk_window_set_default_size(GTK_WINDOW(main_window), 640, 480);
+
+    gtk_widget_show_all(main_window);
+}
+
+/* This function is called periodically to refresh the GUI */
+static gboolean refresh_ui(CustomData *data)
+{
+    gint64 current = -1;
+    /* We do not want to update anything unless we are in the PAUSED or PLAYING states */
+    if (data->state < GST_STATE_PAUSED)
     {
-      g_print ("It has type '%s' which is not raw video. Ignoring.\n", new_pad_type);
-      exit(new_pad_caps,sink_pad);
     }
     else
     {
-      /* Attempt the link */
-      ret = gst_pad_link (new_pad, sink_pad);
-      if (GST_PAD_LINK_FAILED (ret)) 
-      {
-        g_print ("Type is '%s' but link failed.\n", new_pad_type);
-      } 
-      else 
-      {
-        g_print ("Link succeeded (type '%s').\n", new_pad_type);
-      }
+        /* If we didn't know it yet, query the stream duration */
+        if (!GST_CLOCK_TIME_IS_VALID(data->duration))
+        {
+            if (!gst_element_query_duration(data->playbin, GST_FORMAT_TIME, &data->duration))
+            {
+                g_printerr("Could not query current duration.\n");
+            }
+            else
+            {
+                /* Set the range of the slider to the clip duration, in SECONDS */
+                gtk_range_set_range(GTK_RANGE(data->slider), 0, (gdouble)data->duration / GST_SECOND);
+            }
+        }
+        if (gst_element_query_position(data->playbin, GST_FORMAT_TIME, &current))
+        {
+            /* Block the "value-changed" signal, so the slider_cb function is not called
+             * (which would trigger a seek the user has not requested) */
+            g_signal_handler_block(data->slider, data->slider_update_signal_id);
+            /* Set the position of the slider to the current pipeline position, in SECONDS */
+            gtk_range_set_value(GTK_RANGE(data->slider), (gdouble)current / GST_SECOND);
+            /* Re-enable the signal */
+            g_signal_handler_unblock(data->slider, data->slider_update_signal_id);
+        }
     }
-  }
-}
-/*******************************************************************************
-* @brief      This function will be called by the pad-added signal 
-* 
-* 
-* 
-* @author     XIAOCANMENG
-* 
-* @par        revision history:
-*              - 000000 : 2024-01-02 : XIAOCANMENG    : New regulations made
-* 
-* @par        Sequence diagram:
-* @image      {name}.png
-*******************************************************************************/
-void Sample::audio_pad_added_handler (GstElement *src, GstPad *new_pad, CustomData *data) 
-{
-  GstPad *sink_pad = gst_element_get_static_pad (data->audioconvert, "sink");
-  pad_added_handler(src,new_pad,data,sink_pad,"audio/x-raw");
-}
-/*******************************************************************************
-* @brief      {brief}
-* 
-* @param      [in]    src
-* @param      [in]    new_pad
-* @param      [in]    data
-* 
-* 
-* @author     XIAOCANMENG
-* 
-* @par        revision history:
-*              - 000000 : 2024-01-02 : XIAOCANMENG    : New regulations made
-* 
-* @par        Sequence diagram:
-* @image      {name}.png
-*******************************************************************************/
-void Sample::video_pad_added_handler (GstElement *src, GstPad *new_pad, CustomData *data) 
-{
-  GstPad *sink_pad = gst_element_get_static_pad (data->videoconvert, "sink");
-  pad_added_handler(src,new_pad,data,sink_pad,"video/x-raw");
-}
-/*******************************************************************************
-* @brief      {brief}
-* 
-* @param      [in]    bus
-* 
-* 
-* @author     XIAOCANMENG
-* 
-* @par        revision history:
-*              - 000000 : 2024-01-02 : XIAOCANMENG    : New regulations made
-* 
-* @par        Sequence diagram:
-* @image      {name}.png
-*******************************************************************************/
-void Sample::parseMessage(GstBus *bus)
-{
-  GstMessage *msg;
-  bool terminate = false;
-  do {
-    msg = gst_bus_timed_pop_filtered (bus, GST_CLOCK_TIME_NONE,
-        static_cast<GstMessageType>(GST_MESSAGE_STATE_CHANGED | GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
-    /* Parse message */
-    if (msg != NULL) {
-      GError *err;
-      gchar *debug_info;
-
-      switch (GST_MESSAGE_TYPE (msg)) {
-        case GST_MESSAGE_ERROR:
-          gst_message_parse_error (msg, &err, &debug_info);
-          g_printerr ("Error received from element %s: %s\n", GST_OBJECT_NAME (msg->src), err->message);
-          g_printerr ("Debugging information: %s\n", debug_info ? debug_info : "none");
-          g_clear_error (&err);
-          g_free (debug_info);
-          terminate = true;
-          break;
-        case GST_MESSAGE_EOS:
-          g_print ("End-Of-Stream reached.\n");
-          terminate = true;
-          break;
-        case GST_MESSAGE_STATE_CHANGED:
-          /* We are only interested in state-changed messages from the pipeline */
-          if (GST_MESSAGE_SRC (msg) == GST_OBJECT (data.pipeline)) {
-            GstState old_state, new_state, pending_state;
-            gst_message_parse_state_changed (msg, &old_state, &new_state, &pending_state);
-            g_print ("Pipeline state changed from %s to %s:\n",
-                gst_element_state_get_name (old_state), gst_element_state_get_name (new_state));
-          }
-          break;
-        default:
-          /* We should not reach here */
-          g_printerr ("Unexpected message received.\n");
-          break;
-      }
-      gst_message_unref (msg);
-    }
-  } while (!terminate);
+    return TRUE;
 }
 
-
-/*******************************************************************************
-* @brief      {brief}
-* 
-* @param      [in]    argc
-* @param      [in]    argv
-* 
-* @retval     int32_t
-* 
-* @author     XIAOCANMENG
-* 
-* @par        revision history:
-*              - 000000 : 2024-01-02 : XIAOCANMENG    : New regulations made
-* 
-* @par        Sequence diagram:
-* @image      {name}.png
-*******************************************************************************/
-int32_t Sample::tutorial_main_3(int argc, char *argv[]) 
+/* This function is called when new metadata is discovered in the stream */
+static void tags_cb(GstElement *playbin, gint stream, CustomData *data)
 {
-  CustomData data;
-  GstBus *bus;
-  GstStateChangeReturn ret;
+    /* We are possibly in a GStreamer working thread, so we notify the main
+     * thread of this event through a message in the bus */
+    gst_element_post_message(playbin,
+                             gst_message_new_application(GST_OBJECT(playbin),
+                                                         gst_structure_new_empty("tags-changed")));
+}
 
-  /* Initialize GStreamer */
-  gst_init (&argc, &argv);
+/* This function is called when an error message is posted on the bus */
+static void error_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+{
+    GError *err;
+    gchar *debug_info;
 
-  /* Create the elements */
-  data.source = gst_element_factory_make ("uridecodebin", "source");
-  data.audioconvert = gst_element_factory_make ("audioconvert", "audioconvert");
-  data.resample = gst_element_factory_make ("audioresample", "resample");
-  data.audiosink = gst_element_factory_make ("autoaudiosink", "audiosink");
-  data.videoconvert = gst_element_factory_make ("videoconvert", "videoconvert");
-  data.videosink = gst_element_factory_make ("autovideosink", "videosink");
+    /* Print error details on the screen */
+    gst_message_parse_error(msg, &err, &debug_info);
+    g_printerr("Error received from element %s: %s\n", GST_OBJECT_NAME(msg->src), err->message);
+    g_printerr("Debugging information: %s\n", debug_info ? debug_info : "none");
+    g_clear_error(&err);
+    g_free(debug_info);
 
-  /* Create the empty pipeline */
-  data.pipeline = gst_pipeline_new ("test-pipeline");
+    /* Set the pipeline to READY (which stops playback) */
+    gst_element_set_state(data->playbin, GST_STATE_READY);
+}
 
-  // if (isNULL(data.pipeline,data.source,data.audioconvert,data.resample,data.audiosink,data.videoconvert, data.videosink)) 
-  if (isNULL(data.pipeline,data.source,data.videoconvert, data.videosink)) 
-  {
-    g_printerr ("Not all elements could be created.\n");
-  }
-  else
-  {
-    /* Build the pipeline. Note that we are NOT linking the source at this
-       point. We will do it later. */
-    gst_bin_add_many(GST_BIN(data.pipeline), data.source, data.audioconvert, data.resample, data.audiosink, data.videosink, data.videoconvert, NULL);
-    // gst_bin_add_many(GST_BIN(data.pipeline), data.source, data.videoconvert, data.videosink, NULL);
-    if (!gst_element_link_many(data.audioconvert, data.resample, data.audiosink, NULL) ||
-         !gst_element_link_many(data.videoconvert, data.videosink, NULL))
+/* This function is called when an End-Of-Stream message is posted on the bus.
+ * We just set the pipeline to READY (which stops playback) */
+static void eos_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+{
+    g_print("End-Of-Stream reached.\n");
+    gst_element_set_state(data->playbin, GST_STATE_READY);
+}
+
+/* This function is called when the pipeline changes states. We use it to
+ * keep track of the current state. */
+static void state_changed_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+{
+    GstState old_state, new_state, pending_state;
+    gst_message_parse_state_changed(msg, &old_state, &new_state, &pending_state);
+    if (GST_MESSAGE_SRC(msg) == GST_OBJECT(data->playbin))
     {
-      g_printerr("Elements could not be linked.\n");
-      gst_object_unref(data.pipeline);
+        data->state = new_state;
+        g_print("State set to %s\n", gst_element_state_get_name(new_state));
+        if (old_state == GST_STATE_READY && new_state == GST_STATE_PAUSED)
+        {
+            /* For extra responsiveness, we refresh the GUI as soon as we reach the PAUSED state */
+            refresh_ui(data);
+        }
+    }
+}
+
+/* Extract metadata from all the streams and write it to the text widget in the GUI */
+static void analyze_streams(CustomData *data)
+{
+    gint i;
+    GstTagList *tags;
+    gchar *str, *total_str;
+    guint rate;
+    gint n_video, n_audio, n_text;
+    GtkTextBuffer *text;
+
+    /* Clean current contents of the widget */
+    text = gtk_text_view_get_buffer(GTK_TEXT_VIEW(data->streams_list));
+    gtk_text_buffer_set_text(text, "", -1);
+
+    /* Read some properties */
+    g_object_get(data->playbin, "n-video", &n_video, NULL);
+    g_object_get(data->playbin, "n-audio", &n_audio, NULL);
+    g_object_get(data->playbin, "n-text", &n_text, NULL);
+
+    for (i = 0; i < n_video; i++)
+    {
+        tags = NULL;
+        /* Retrieve the stream's video tags */
+        g_signal_emit_by_name(data->playbin, "get-video-tags", i, &tags);
+        if (tags)
+        {
+            total_str = g_strdup_printf("video stream %d:\n", i);
+            gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+            g_free(total_str);
+            gst_tag_list_get_string(tags, GST_TAG_VIDEO_CODEC, &str);
+            total_str = g_strdup_printf("  codec: %s\n", str ? str : "unknown");
+            gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+            g_free(total_str);
+            g_free(str);
+            gst_tag_list_free(tags);
+        }
+    }
+
+    for (i = 0; i < n_audio; i++)
+    {
+        tags = NULL;
+        /* Retrieve the stream's audio tags */
+        g_signal_emit_by_name(data->playbin, "get-audio-tags", i, &tags);
+        if (tags)
+        {
+            total_str = g_strdup_printf("\naudio stream %d:\n", i);
+            gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+            g_free(total_str);
+            if (gst_tag_list_get_string(tags, GST_TAG_AUDIO_CODEC, &str))
+            {
+                total_str = g_strdup_printf("  codec: %s\n", str);
+                gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+                g_free(total_str);
+                g_free(str);
+            }
+            if (gst_tag_list_get_string(tags, GST_TAG_LANGUAGE_CODE, &str))
+            {
+                total_str = g_strdup_printf("  language: %s\n", str);
+                gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+                g_free(total_str);
+                g_free(str);
+            }
+            if (gst_tag_list_get_uint(tags, GST_TAG_BITRATE, &rate))
+            {
+                total_str = g_strdup_printf("  bitrate: %d\n", rate);
+                gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+                g_free(total_str);
+            }
+            gst_tag_list_free(tags);
+        }
+    }
+
+    for (i = 0; i < n_text; i++)
+    {
+        tags = NULL;
+        /* Retrieve the stream's subtitle tags */
+        g_signal_emit_by_name(data->playbin, "get-text-tags", i, &tags);
+        if (tags)
+        {
+            total_str = g_strdup_printf("\nsubtitle stream %d:\n", i);
+            gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+            g_free(total_str);
+            if (gst_tag_list_get_string(tags, GST_TAG_LANGUAGE_CODE, &str))
+            {
+                total_str = g_strdup_printf("  language: %s\n", str);
+                gtk_text_buffer_insert_at_cursor(text, total_str, -1);
+                g_free(total_str);
+                g_free(str);
+            }
+            gst_tag_list_free(tags);
+        }
+    }
+}
+
+/* This function is called when an "application" message is posted on the bus.
+ * Here we retrieve the message posted by the tags_cb callback */
+static void application_cb(GstBus *bus, GstMessage *msg, CustomData *data)
+{
+    if (g_strcmp0(gst_structure_get_name(gst_message_get_structure(msg)), "tags-changed") == 0)
+    {
+        /* If the message is the "tags-changed" (only one we are currently issuing), update
+         * the stream info GUI */
+        analyze_streams(data);
+    }
+}
+
+int32_t tutorial_main_5(int32_t argc, char *argv[])
+{
+    CustomData data;
+    GstStateChangeReturn ret;
+    GstBus *bus;
+    GstElement *gtkglsink, *videosink;
+
+    /* Initialize GTK */
+    gtk_init(&argc, &argv);
+
+    /* Initialize GStreamer */
+    gst_init(&argc, &argv);
+
+    /* Initialize our data structure */
+    memset(&data, 0, sizeof(data));
+    data.duration = GST_CLOCK_TIME_NONE;
+
+    /* Create the elements */
+    data.playbin = gst_element_factory_make("playbin", "playbin");
+    videosink = gst_element_factory_make("glsinkbin", "glsinkbin");
+    gtkglsink = gst_element_factory_make("gtkglsink", "gtkglsink");
+
+    /* Here we create the GTK Sink element which will provide us with a GTK widget where
+     * GStreamer will render the video at and we can add to our UI.
+     * Try to create the OpenGL version of the video sink, and fallback if that fails */
+    if (gtkglsink != NULL && videosink != NULL)
+    {
+        g_printerr("Successfully created GTK GL Sink");
+
+        g_object_set(videosink, "sink", gtkglsink, NULL);
+
+        /* The gtkglsink creates the gtk widget for us. This is accessible through a property.
+         * So we get it and use it later to add it to our gui. */
+        g_object_get(gtkglsink, "widget", &data.sink_widget, NULL);
     }
     else
     {
-      /* Set the URI to play */
-      g_object_set(data.source, "uri", "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm", NULL);
-      /* Connect to the pad-added signal */
-      g_signal_connect(data.source, "pad-added", G_CALLBACK(audio_pad_added_handler), &data);
-      g_signal_connect(data.source, "pad-added", G_CALLBACK(video_pad_added_handler), &data);
-      /* Start playing */
-      ret = gst_element_set_state(data.pipeline, GST_STATE_PLAYING);
-      if (ret == GST_STATE_CHANGE_FAILURE)
-      {
-        g_printerr("Unable to set the pipeline to the playing state.\n");
-        gst_object_unref(data.pipeline);
-      }
-      else
-      {
-        /* Listen to the bus */
-        bus = gst_element_get_bus(data.pipeline);
-        /* Parse message */
-        parseMessage(bus);
-        /* Free resources */
+        g_printerr("Could not create gtkglsink, falling back to gtksink.\n");
+
+        videosink = gst_element_factory_make("gtksink", "gtksink");
+        g_object_get(videosink, "widget", &data.sink_widget, NULL);
+    }
+
+    if (isNULL(data.playbin, videosink))
+    {
+        g_printerr("Not all elements could be created.\n");
+    }
+    else
+    {
+        /* Set the URI to play */
+        g_object_set(data.playbin, "uri", "https://gstreamer.freedesktop.org/data/media/sintel_trailer-480p.webm", NULL);
+
+        /* Set the video-sink  */
+        g_object_set(data.playbin, "video-sink", videosink, NULL);
+
+        /* Connect to interesting signals in playbin */
+        g_signal_connect(G_OBJECT(data.playbin), "video-tags-changed", (GCallback)tags_cb, &data);
+        g_signal_connect(G_OBJECT(data.playbin), "audio-tags-changed", (GCallback)tags_cb, &data);
+        g_signal_connect(G_OBJECT(data.playbin), "text-tags-changed", (GCallback)tags_cb, &data);
+
+        /* Create the GUI */
+        create_ui(&data);
+
+        /* Instruct the bus to emit signals for each received message, and connect to the interesting signals */
+        bus = gst_element_get_bus(data.playbin);
+        gst_bus_add_signal_watch(bus);
+        g_signal_connect(G_OBJECT(bus), "message::error", (GCallback)error_cb, &data);
+        g_signal_connect(G_OBJECT(bus), "message::eos", (GCallback)eos_cb, &data);
+        g_signal_connect(G_OBJECT(bus), "message::state-changed", (GCallback)state_changed_cb, &data);
+        g_signal_connect(G_OBJECT(bus), "message::application", (GCallback)application_cb, &data);
         gst_object_unref(bus);
-        gst_element_set_state(data.pipeline, GST_STATE_NULL);
-        gst_object_unref(data.pipeline);
-      }
-    }
-  }
-  return 0;
-}
 
+        /* Start playing */
+        ret = gst_element_set_state(data.playbin, GST_STATE_PLAYING);
+        if (ret == GST_STATE_CHANGE_FAILURE)
+        {
+            g_printerr("Unable to set the pipeline to the playing state.\n");
+            gst_object_unref(data.playbin);
+            gst_object_unref(videosink);
+        }
+        else
+        {
+
+            /* Register a function that GLib will call every second */
+            g_timeout_add_seconds(1, (GSourceFunc)refresh_ui, &data);
+
+            /* Start the GTK main loop. We will not regain control until gtk_main_quit is called. */
+            gtk_main();
+
+            /* Free resources */
+            gst_element_set_state(data.playbin, GST_STATE_NULL);
+            gst_object_unref(data.playbin);
+            gst_object_unref(videosink);
+        }
+    }
+    return 0;
+}
